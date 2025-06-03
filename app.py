@@ -415,25 +415,24 @@ def add_custom_css():
     
     /* Grid Images View Styling */
     .image-grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        grid-auto-rows: 1fr;
-        gap: 4px;
-        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px; /* Or use margins on items */
+        align-items: stretch; /* Makes items in a row stretch to the same height */
     }
-    
+
     .grid-item {
-        aspect-ratio: 1;
+        flex: 1 0 150px; /* Example: grow, don't shrink, basis of 150px (adjust width basis) */
+        /* Or fixed width: width: 180px; */
+        height: 150px;  /* ENFORCE A FIXED HEIGHT */
         overflow: hidden;
-        background-color: white;
-        border-radius: 3px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 1px; /* if not using gap */
     }
-    
+
     .grid-item img {
         width: 100%;
         height: 100%;
-        object-fit: contain;
+        object-fit: cover; /* Essential to fill the fixed item dimensions */
     }
     
     .scrollable-container {
@@ -1519,210 +1518,206 @@ def render_excel_grid_tab():
         
         
 # Simple grid display functions (no filtering/sorting)
+# REPLACEMENT for display_simple_product_grid
 def display_simple_product_grid(df):
     if df is None or df.empty:
         st.warning("No data available to display.")
         return
-    
+
     import streamlit.components.v1 as components
-    
-    html_content = """
+
+    # This HTML uses a clean masonry layout with column-count.
+    # It's wrapped in a container with a fixed height and vertical scroll.
+    html_content = f"""
     <style>
-        .image-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            grid-auto-rows: 1fr;
-            gap: 4px;
-            width: 100%;
-        }
-        
-        .grid-item {
-            aspect-ratio: 1;
-            overflow: hidden;
-        }
-        
-        .grid-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background-color: white;
-        }
-        
-        .scrollable-container {
-            height: 100%;
+        .masonry-container {{
+            height: 800px; /* Fixed height for the scrollable area */
             overflow-y: auto;
-        }
+            padding: 5px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }}
+        .masonry-grid {{
+            column-count: 5;  /* 5 columns for the standard view */
+            column-gap: 5px;
+        }}
+        .masonry-item {{
+            margin-bottom: 5px; /* Vertical gap between items */
+            break-inside: avoid; /* Essential for masonry: prevents items from splitting across columns */
+            border-radius: 4px;
+            overflow: hidden;
+            background-color: white;
+        }}
+        .masonry-item img {{
+            display: block; /* Removes bottom space under image */
+            width: 100%;
+            height: auto;   /* Maintains aspect ratio */
+            object-fit: cover;
+        }}
     </style>
     
-    <div class="scrollable-container">
-        <div class="image-grid">
+    <div class="masonry-container">
+        <div class="masonry-grid">
     """
     
     for i, product in df.iterrows():
-        image_url = product['Product_Image_URL']
+        image_url = product.get('Product_Image_URL', '') 
         
-        if not image_url:
-            image_url = "https://placehold.co/200x200?text=No+Image"
-            
-        html_content += f"""
-        <div class="grid-item">
-            <img src="{image_url}" alt="Product">
-        </div>
-        """
-    
+        if image_url and image_url.strip() != '':
+            html_content += f"""
+            <div class="masonry-item">
+                <img src="{image_url}" alt="Product Image">
+            </div>
+            """
+        else:
+            # Optionally, show a placeholder for items without a valid URL
+            html_content += f"""
+            <div class="masonry-item" style="height:150px; display:flex; align-items:center; justify-content:center; text-align:center; color: #888; font-size: 12px;">
+                No Image Found
+            </div>
+            """
+
     html_content += """
-        </div>
+        </div> 
     </div>
     """
     
-    components.html(html_content, height=800, scrolling=True)
+    components.html(html_content, height=810) # Set height to container height + padding
 
+# REPLACEMENT for display_simple_fullscreen_grid
 def display_simple_fullscreen_grid(df):
     if df is None or df.empty:
         st.warning("No data available to display.")
         return
-    
+
     import streamlit.components.v1 as components
+
+    # The Streamlit button to exit fullscreen remains outside the HTML component
     exit_container = st.container()
     with exit_container:
-        if st.button("✕", key="exit_fullscreen_excel", help="Exit fullscreen"):
+        if st.button("✕", key="exit_fullscreen_excel_grid", help="Exit fullscreen (or press Esc)"):
             st.session_state.fullscreen_mode = False
             st.rerun()
+
+    # The HTML content now includes a proper masonry layout and the critical JavaScript
+    # to achieve a true fullscreen overlay effect.
     html_content = """
     <style>
         body {
             margin: 0;
             padding: 0;
-            overflow: hidden;
+            overflow: hidden; /* Prevent parent scrollbars */
         }
         
-        .fullscreen-container {
+        .fullscreen-wrapper {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
-            height: 100vh;
+            height: 100vh; /* This makes it fill the entire screen height */
             background-color: #1e1e1e;
-            z-index: 9999;
-            overflow: auto;
+            overflow-y: auto; /* Adds a scrollbar only if needed */
             padding: 10px;
             box-sizing: border-box;
         }
         
-        .fullscreen-exit-button {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            background-color: rgba(0,0,0,0.7);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 10000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            transition: background-color 0.2s, transform 0.2s;
+        .masonry-grid-fullscreen {
+            column-count: 7; /* More columns for the fullscreen view */
+            column-gap: 8px;
         }
         
-        .fullscreen-exit-button:hover {
-            background-color: rgba(255,0,0,0.8);
-            transform: scale(1.1);
-        }
-        
-        .fullscreen-gallery-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 8px;
-            width: 100%;
-            padding-top: 10px;
-        }
-        
-        .gallery-item {
-            aspect-ratio: 1;
+        .masonry-item-fullscreen {
             background-color: white;
             border-radius: 4px;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
-        
-        .gallery-item:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            z-index: 1;
-        }
-        
-        .gallery-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background-color: white;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .gallery-item {
-            animation: fadeIn 0.3s ease forwards;
+            margin-bottom: 8px;
+            break-inside: avoid;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            animation: fadeIn 0.4s ease forwards;
             animation-delay: calc(var(--item-index) * 0.02s);
             opacity: 0;
         }
+        
+        .masonry-item-fullscreen img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
     
-    <div class="fullscreen-container">
-        <div class="fullscreen-gallery-grid">
+    <div class="fullscreen-wrapper">
+        <div class="masonry-grid-fullscreen">
     """
     
     for i, product in df.iterrows():
-        image_url = product['Product_Image_URL']
+        image_url = product.get('Product_Image_URL', '')
         
-        if not image_url:
-            image_url = "https://placehold.co/200x200?text=No+Image"
-            
-        html_content += f"""
-        <div class="gallery-item" style="--item-index: {i}">
-            <img src="{image_url}" alt="Product">
-        </div>
-        """
+        if image_url and image_url.strip() != '':
+            style_attr = f'style="--item-index: {i};"' 
+            html_content += f"""
+            <div class="masonry-item-fullscreen" {style_attr}>
+                <img src="{image_url}" alt="Product Image">
+            </div>
+            """
     
     html_content += """
         </div>
     </div>
     
     <script>
-        document.addEventListener('keydown', function(event) {
-            if (event.key === "Escape") {
-                window.parent.location.reload();
-            }
-        });
-        document.addEventListener('DOMContentLoaded', function() {
-            const streamlitElements = document.querySelectorAll('.stApp > div:not(.element-container), header, footer, .stToolbar');
-            streamlitElements.forEach(el => {
-                el.style.display = 'none';
-            });
+        // This script is crucial. It finds and hides the main Streamlit UI elements
+        // to allow the component to fill the entire browser window.
+        function enterFullscreenMode() {
+            const streamlitDoc = window.parent.document;
+            if (!streamlitDoc) return;
+
+            // Find our component's iframe to keep its container visible
+            const iframe = streamlitDoc.querySelector('iframe[srcdoc*="fullscreen-wrapper"]');
             
-            const container = document.querySelector('.fullscreen-container');
-            if (container) {
-                container.style.position = 'fixed';
-                container.style.top = '0';
-                container.style.left = '0';
-                container.style.width = '100vw';
-                container.style.height = '100vh';
-                container.style.zIndex = '999999';
+            // Hide all direct children of the main app container except the one holding our component
+            const mainAppContainer = streamlitDoc.querySelector('.stApp');
+            if (mainAppContainer) {
+                Array.from(mainAppContainer.children).forEach(child => {
+                    if (iframe && child.contains(iframe)) {
+                        // This is the container for our component, keep it
+                    } else {
+                        // Hide all other elements like headers, tabs, footers, etc.
+                        child.style.display = 'none';
+                    }
+                });
             }
+        }
+        
+        // This handles the Escape key press to exit fullscreen
+        function handleEscKey(event) {
+            if (event.key === "Escape") {
+                const exitButton = window.parent.document.querySelector('button[key="exit_fullscreen_excel_grid"]');
+                if (exitButton) {
+                    exitButton.click();
+                }
+            }
+        }
+
+        // Run the script on load and add the event listener
+        window.addEventListener('load', enterFullscreenMode);
+        window.parent.document.addEventListener('keydown', handleEscKey);
+
+        // Cleanup listener when the component is unmounted
+        window.addEventListener('beforeunload', () => {
+             window.parent.document.removeEventListener('keydown', handleEscKey);
         });
+
     </script>
     """
     
+    # Using height=None allows the component's content to define its own dimensions,
+    # which is perfect for our position:fixed fullscreen wrapper.
     components.html(html_content, height=1000, scrolling=True)
-
 def render_upload_tab():
     st.markdown("""
     <div class="upload-container">
