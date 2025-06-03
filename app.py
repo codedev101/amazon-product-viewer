@@ -1435,9 +1435,6 @@ def render_amazon_grid_tab():
         st.rerun()
 
     if st.session_state.fullscreen_mode:
-        display_simple_fullscreen_grid(st.session_state.processed_data)
-
-    if st.session_state.fullscreen_mode:
         display_fullscreen_grid(
             st.session_state.processed_data,
             search_term=search_term if search_term else None,
@@ -1469,6 +1466,7 @@ def render_amazon_grid_tab():
         st.error(f"Error exporting data: {str(e)}")
 
 # Function to render the Excel Grid tab (no sorting/filtering)
+# Function to render the Excel Grid tab (no sorting/filtering)
 def render_excel_grid_tab():
     if st.session_state.processed_data is None:
         st.warning("No data has been processed yet. Please upload and process a CSV file in the Upload tab.")
@@ -1497,6 +1495,10 @@ def render_excel_grid_tab():
         fullscreen_button = st.button("🖼️ Full Screen View", key="excel_grid_fullscreen_btn", help="View images in a fullscreen 7-column grid")
     
     if fullscreen_button:
+        st.session_state.fullscreen_mode = True
+        st.rerun()
+    
+    if st.session_state.fullscreen_mode:
         display_simple_fullscreen_grid(st.session_state.processed_data)
     else:
         display_simple_product_grid(st.session_state.processed_data)
@@ -1513,7 +1515,9 @@ def render_excel_grid_tab():
             st.success("Excel data exported successfully!")
     except Exception as e:
         st.error(f"Error exporting data: {str(e)}")
-
+        
+        
+        
 # Simple grid display functions (no filtering/sorting)
 def display_simple_product_grid(df):
     if df is None or df.empty:
@@ -1581,7 +1585,7 @@ def display_simple_fullscreen_grid(df):
     import streamlit.components.v1 as components
     exit_container = st.container()
     with exit_container:
-        if st.button("✕", key="exit_fullscreen_amazon", help="Exit fullscreen"):
+        if st.button("✕", key="exit_fullscreen_excel", help="Exit fullscreen"):
             st.session_state.fullscreen_mode = False
             st.rerun()
     html_content = """
