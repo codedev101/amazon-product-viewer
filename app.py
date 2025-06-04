@@ -1,3 +1,4 @@
+import base64
 import streamlit as st
 import pandas as pd
 import requests
@@ -17,16 +18,19 @@ st.cache_data.clear()
 # Set page configuration
 st.set_page_config(
     page_title="Amazon Product Viewer",
-    page_icon="🛒",
+    page_icon="logo.png",  # Replace with your logo file path
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
+
+
+
+# Initialize session state for authentication
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 if 'fullscreen_mode' not in st.session_state:
     st.session_state.fullscreen_mode = False
-
-
-# Initialize session state variables if not already present
 if 'processed_data' not in st.session_state:
     st.session_state.processed_data = None
 if 'failed_asins' not in st.session_state:
@@ -35,18 +39,128 @@ if 'logs' not in st.session_state:
     st.session_state.logs = []
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
-
 if 'current_processing_id' not in st.session_state:
     st.session_state.current_processing_id = 0
 if 'total_processing_count' not in st.session_state:
     st.session_state.total_processing_count = 0
 
-# Custom CSS for professional design with grid focus
+# Custom CSS including password screen styling
 def add_custom_css():
     st.markdown("""
     <style>
+    :root {
+        --primary-color: #232F3E;
+        --accent-color: #FF9900;
+        --text-color: #232F3E;
+        --light-bg: #f5f5f5;
+        --card-bg: white;
+        --header-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        --body-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+
+    # Inside the <style> block, replace password-related styles
+    /* Password input styling */
+    .password-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+        background-color: var(--card-bg);
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin: 20px auto;
+        max-width: 400px;
+    }
     
-    /* Full screen gallery specific styling */
+    /* Top center logo */
+    .top-logo-container {
+        text-align: center;
+        padding: 10px 0 5px 0;
+        background-color: white;
+    }
+
+    .top-center-logo {
+        width:  350px;
+        height: 150px;
+        object-fit: contain;
+    }
+
+    /* Login page logo - make it bigger */
+    .login-logo {
+        width: 100px;
+        height: 100px;
+        margin-bottom: 20px;
+        object-fit: contain;
+    }
+
+    /* Fix the main header - remove flex and logo styles */
+    .main-header {
+        background-color: var(--primary-color);
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        text-align: center; /* Center the text */
+    }
+
+    .main-header h1 {
+        font-family: var(--header-font);
+        font-weight: 700;
+        margin: 0;
+        font-size: 2.5rem;
+        color: white;
+        white-space: nowrap; /* Prevent text wrapping */
+    }
+
+    .subtitle {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        margin-top: 5px;
+        white-space: nowrap; /* Prevent subtitle wrapping */
+    }
+
+    .password-container h2 {
+        color: #FF9900;  /* Orange accent color */
+        font-family: var(--header-font);
+        margin-bottom: 15px;
+        font-size: 1.5rem;
+    }
+
+    .password-input {
+        padding: 8px;
+        font-size: 14px;
+        width: 100%;
+        border: 2px solid #ccc;
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+
+    .password-button {
+        background-color: var(--accent-color);
+        color: white;
+        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 5px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .password-button:hover {
+        background-color: #e68a00;
+        transform: translateY(-2px);
+    }
+
+    .error-message {
+        color: #d9534f;
+        font-size: 12px;
+        margin-top: 8px;
+        text-align: center;
+    }
+
+    
+    /* Existing styles */
     .fullscreen-gallery-container {
         position: fixed;
         top: 0;
@@ -140,7 +254,6 @@ def add_custom_css():
         opacity: 1;
     }
 
-    /* Animation for items loading */
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
@@ -152,17 +265,6 @@ def add_custom_css():
         opacity: 0;
     }
     
-    :root {
-        --primary-color: #232F3E;
-        --accent-color: #FF9900;
-        --text-color: #232F3E;
-        --light-bg: #f5f5f5;
-        --card-bg: white;
-        --header-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        --body-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
-    
-    /* Header styling */
     .main-header {
         background-color: var(--primary-color);
         padding: 15px;
@@ -197,16 +299,16 @@ def add_custom_css():
         text-align: center;
         border: 2px dashed #ccc;
         margin-bottom: 15px;
-        color: var(--text-color); /* Ensure text is dark for contrast */
+        color: var(--text-color);
     }
     
     .upload-container h3 {
-        color: var(--text-color); /* Explicitly set header text color */
+        color: var(--text-color);
         margin-bottom: 10px;
     }
     
     .upload-container p {
-        color: var(--text-color); /* Explicitly set paragraph text color */
+        color: var(--text-color);
         margin: 5px 0;
     }
     
@@ -221,16 +323,16 @@ def add_custom_css():
         padding: 15px;
         border-radius: 10px;
         margin-bottom: 10px;
-        color: var(--text-color); /* Ensure text is dark for contrast */
+        color: var(--text-color);
     }
     
     .filters-panel h3 {
-        color: var(--text-color); /* Explicitly set header text color */
+        color: var(--text-color);
         margin: 0 0 10px 0;
     }
     
     .filters-panel p {
-        color: var(--text-color); /* Explicitly set paragraph text color */
+        color: var(--text-color);
         margin: 5px 0;
     }
     
@@ -310,7 +412,6 @@ def add_custom_css():
         font-size: 0.85rem;
     }
     
-    /* Fix for raw data display */
     .raw-data-container {
         background-color: #f8f9fa;
         border-radius: 5px;
@@ -323,7 +424,6 @@ def add_custom_css():
         word-break: break-word;
     }
 
-    /* Log container styling */
     .log-container {
         background-color: #1e1e1e;
         color: #dcdcdc;
@@ -357,7 +457,6 @@ def add_custom_css():
         color: #4ec9b0;
     }
     
-    /* Failed ASIN list styling */
     .failed-asin-list {
         background-color: #ff5555;
         border-left: 5px solid #ff0000;
@@ -389,7 +488,6 @@ def add_custom_css():
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     
-    /* Processing status indicator */
     .processing-indicator {
         position: fixed;
         bottom: 20px;
@@ -413,26 +511,24 @@ def add_custom_css():
         color: #dcdcaa;
     }
     
-    /* Grid Images View Styling */
     .image-grid {
         display: flex;
         flex-wrap: wrap;
-        gap: 2px; /* Or use margins on items */
-        align-items: stretch; /* Makes items in a row stretch to the same height */
+        gap: 2px;
+        align-items: stretch;
     }
 
     .grid-item {
-        flex: 1 0 150px; /* Example: grow, don't shrink, basis of 150px (adjust width basis) */
-        /* Or fixed width: width: 180px; */
-        height: 150px;  /* ENFORCE A FIXED HEIGHT */
+        flex: 1 0 150px;
+        height: 150px;
         overflow: hidden;
-        margin: 1px; /* if not using gap */
+        margin: 1px;
     }
 
     .grid-item img {
         width: 100%;
         height: 100%;
-        object-fit: cover; /* Essential to fill the fixed item dimensions */
+        object-fit: cover;
     }
     
     .scrollable-container {
@@ -450,6 +546,61 @@ def add_custom_css():
     }
     </style>
     """, unsafe_allow_html=True)
+
+def get_logo_base64():
+    try:
+        with open("logo.png", "rb") as img_file:  # Just the filename
+            return base64.b64encode(img_file.read()).decode()
+    except FileNotFoundError:
+        return ""
+
+
+# Password verification function
+def verify_password():
+    # Add the top logo first (same as main page)
+    st.markdown("""
+    <div class="top-logo-container">
+        <img src="data:image/png;base64,{logo_base64}" class="top-center-logo" alt="Logo">
+    </div>
+    """.format(logo_base64=get_logo_base64()), unsafe_allow_html=True)
+    
+    # Then the login form (remove the old logo from here)
+    st.markdown("""
+    <div class="password-container">
+        <h2>Enter Password</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.form(key="password_form"):
+        password = st.text_input("Password", type="password", key="password_input")
+        submit_button = st.form_submit_button("Login", help="Click to verify password")
+        
+        st.markdown("""
+        <script>
+            const input = document.querySelector('input[type="password"]');
+            if (input) {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        const form = input.closest('form');
+                        if (form) {
+                            const button = form.querySelector('button');
+                            if (button) {
+                                button.click();
+                            }
+                        }
+                    }
+                });
+            }
+        </script>
+        """, unsafe_allow_html=True)
+        
+        if submit_button:
+            if password == "nick123":
+                st.session_state.authenticated = True
+                st.success("Login successful!")
+                st.rerun()
+            else:
+                st.markdown('<p class="error-message">Incorrect password. Please try again.</p>', unsafe_allow_html=True)
 
 # Function to add a log message to the session state
 def add_log(message, level="info"):
@@ -530,7 +681,7 @@ def get_amazon_product_details(asin, log_queue, processing_id, total_count):
         'error': None
     }
 
-    for attempt in range(3):  # Keep 3 attempts
+    for attempt in range(3):
         session = create_session()
         url = f"https://www.amazon.com/dp/{asin}"
         
@@ -549,13 +700,11 @@ def get_amazon_product_details(asin, log_queue, processing_id, total_count):
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # Extract product title
                 title_element = soup.select_one('#productTitle')
                 if title_element:
                     product_details['title'] = title_element.get_text().strip()
                     log_queue.put(('info', f'ASIN {asin}: Found title: {product_details["title"][:30]}...'))
                 
-                # Extract product price
                 price_selectors = [
                     '.a-price .a-offscreen',
                     '#priceblock_ourprice',
@@ -572,7 +721,6 @@ def get_amazon_product_details(asin, log_queue, processing_id, total_count):
                         log_queue.put(('info', f'ASIN {asin}: Found price: {product_details["price"]}'))
                         break
                 
-                # Extract product image
                 image_found = False
                 image_selectors = [
                     '#landingImage',
@@ -633,7 +781,6 @@ def get_amazon_product_details(asin, log_queue, processing_id, total_count):
                     log_queue.put(('warning', f'ASIN {asin}: No image found on attempt {attempt+1}. Will retry.'))
                     continue
                 
-                # Check if we have the essential data (title, price, image)
                 if product_details['title'] != 'Product information not available' and image_found:
                     product_details['success'] = True
                     log_queue.put(('success', f'ASIN {asin}: Successfully found title, price and image!'))
@@ -650,18 +797,14 @@ def get_amazon_product_details(asin, log_queue, processing_id, total_count):
         product_details['error'] = 'Failed to retrieve product data after 3 attempts'
     
     return product_details
-    
+
 # Function to detect CSV type and process accordingly
 def detect_csv_type(df):
-    """Detect if CSV contains Amazon ASINs or direct image URLs"""
-    
-    # Clean the dataframe first - remove empty rows and handle NaN
     df_clean = df.dropna(how='all').copy()
     
     if df_clean.empty:
         return 'unknown'
     
-    # Check for the specific Excel format: "Listing ID" and "url" columns
     columns_lower = [col.lower().strip() for col in df_clean.columns]
     
     if ('listing id' in columns_lower and 'url' in columns_lower) or \
@@ -669,13 +812,11 @@ def detect_csv_type(df):
        ('listingid' in columns_lower and 'url' in columns_lower):
         return 'excel_format'
     
-    # Check for Amazon ASINs
     amazon_columns = ['asin', 'sku', 'product_id']
     for col in df_clean.columns:
         if any(amazon_term in col.lower() for amazon_term in amazon_columns):
             return 'amazon'
     
-    # Check for direct image URLs by examining the actual data
     for index, row in df_clean.head(20).iterrows():
         for value in row:
             if pd.notna(value) and value != 'nan':
@@ -689,8 +830,6 @@ def detect_csv_type(df):
 
 # Function to process direct image URLs
 def process_direct_urls_data(df, max_rows=None):
-    """Process CSV with direct image URLs (like liquidation.com)"""
-    
     if max_rows is not None and max_rows > 0 and max_rows < len(df):
         df = df.head(max_rows)
     
@@ -714,10 +853,8 @@ def process_direct_urls_data(df, max_rows=None):
         progress_bar.progress(progress)
         status_text.text(f"Processing {index + 1} of {total_rows} images ({int(progress*100)}%)")
         
-        # Extract data from row
         row_dict = row.to_dict()
         
-        # Find image URL in the row (look for http URLs)
         image_url = None
         listing_id = None
         
@@ -726,7 +863,6 @@ def process_direct_urls_data(df, max_rows=None):
                 image_url = str(value).strip()
                 break
         
-        # Find listing ID (usually the first column or a numeric value)
         for key, value in row_dict.items():
             if pd.notna(value) and str(value).isdigit():
                 listing_id = str(value).strip()
@@ -735,7 +871,6 @@ def process_direct_urls_data(df, max_rows=None):
         if not listing_id:
             listing_id = f"Item_{index + 1}"
         
-        # Create enriched row
         new_row = row_dict.copy()
         new_row.update({
             'Listing_ID': listing_id,
@@ -757,14 +892,13 @@ def process_direct_urls_data(df, max_rows=None):
         
         enriched_data.append(new_row)
         
-        # Update log display
         log_display = '<div class="log-container">\n'
         for level, message in st.session_state.logs:
             log_display += f'<div class="log-{level}">{message}</div>\n'
         log_display += '</div>'
         log_container.markdown(log_display, unsafe_allow_html=True)
         
-        time.sleep(0.05)  # Small delay for UI updates
+        time.sleep(0.05)
     
     enriched_df = pd.DataFrame(enriched_data)
     
@@ -772,7 +906,6 @@ def process_direct_urls_data(df, max_rows=None):
     progress_bar.progress(1.0)
     status_text.empty()
     
-    # Show failed items if any
     if st.session_state.failed_asins:
         failed_count = len(st.session_state.failed_asins)
         st.markdown(f"""
@@ -791,8 +924,6 @@ def process_direct_urls_data(df, max_rows=None):
 
 # Function to process Excel format with Listing ID and url columns
 def process_excel_format_data(df, max_rows=None):
-    """Process Excel with 'Listing ID' and 'url' columns"""
-    
     if max_rows is not None and max_rows > 0 and max_rows < len(df):
         df = df.head(max_rows)
     
@@ -805,7 +936,6 @@ def process_excel_format_data(df, max_rows=None):
     log_expander = st.expander("Processing Log (Live)", expanded=True)
     log_container = log_expander.empty()
     
-    # Find the correct column names (case insensitive)
     listing_id_col = None
     url_col = None
     
@@ -820,7 +950,6 @@ def process_excel_format_data(df, max_rows=None):
         st.error("Could not find 'Listing ID' and 'url' columns in the Excel file.")
         return None
     
-    # Clean the dataframe
     df_clean = df.dropna(how='all').copy()
     total_rows = len(df_clean)
     
@@ -835,21 +964,17 @@ def process_excel_format_data(df, max_rows=None):
         progress_bar.progress(progress)
         status_text.text(f"Processing {index + 1} of {total_rows} images ({int(progress*100)}%)")
         
-        # Extract data from row
         listing_id = row[listing_id_col] if pd.notna(row[listing_id_col]) else f"Item_{index + 1}"
         image_url = row[url_col] if pd.notna(row[url_col]) else ''
         
-        # Convert to string and clean
         listing_id = str(listing_id).strip()
         image_url = str(image_url).strip()
         
-        # Validate image URL
         valid_url = False
         if image_url and image_url != 'nan' and 'http' in image_url.lower():
             if any(ext in image_url.lower() for ext in ['.jpg', '.png', '.jpeg', '.gif', '.webp']):
                 valid_url = True
         
-        # Create enriched row with all original data plus new fields
         new_row = row.to_dict()
         new_row.update({
             'Listing_ID': listing_id,
@@ -859,7 +984,7 @@ def process_excel_format_data(df, max_rows=None):
             'Product_Description': 'Excel imported item',
             'Product_Rating': 'N/A',
             'Fetch_Success': valid_url,
-            'Product_Link': f"https://example.com/item/{listing_id}",  # Generic link
+            'Product_Link': f"https://example.com/item/{listing_id}",
             'Error': None if valid_url else 'Invalid or missing image URL'
         })
         
@@ -871,14 +996,13 @@ def process_excel_format_data(df, max_rows=None):
         
         enriched_data.append(new_row)
         
-        # Update log display after every row
         log_display = '<div class="log-container">\n'
         for level, message in st.session_state.logs:
             log_display += f'<div class="log-{level}">{message}</div>\n'
         log_display += '</div>'
         log_container.markdown(log_display, unsafe_allow_html=True)
         
-        time.sleep(0.1)  # Slightly longer delay to ensure UI updates
+        time.sleep(0.1)
         
     enriched_df = pd.DataFrame(enriched_data)
     
@@ -886,7 +1010,6 @@ def process_excel_format_data(df, max_rows=None):
     progress_bar.progress(1.0)
     status_text.empty()
     
-    # Show failed items if any
     if st.session_state.failed_asins:
         failed_count = len(st.session_state.failed_asins)
         st.markdown(f"""
@@ -895,7 +1018,7 @@ def process_excel_format_data(df, max_rows=None):
             <div>
         """, unsafe_allow_html=True)
         
-        for failed_item in st.session_state.failed_asins[:10]:  # Show max 10
+        for failed_item in st.session_state.failed_asins[:10]:
             st.markdown(f'<span class="failed-asin-item">{failed_item}</span>', unsafe_allow_html=True)
         
         if failed_count > 10:
@@ -904,7 +1027,6 @@ def process_excel_format_data(df, max_rows=None):
         st.markdown('</div></div>', unsafe_allow_html=True)
     
     add_log(f"Processing complete! Processed {len(enriched_data)} items", "success")
-    # Final log update
     log_display = '<div class="log-container">\n'
     for level, message in st.session_state.logs:
         log_display += f'<div class="log-{level}">{message}</div>\n'
@@ -913,13 +1035,13 @@ def process_excel_format_data(df, max_rows=None):
     
     return enriched_df
 
-# Function to process CSV data (updated to handle new Excel format)
+# Function to process CSV data
 def process_csv_data(df, max_rows=None):
     csv_type = detect_csv_type(df)
     
     if csv_type == 'amazon':
         if not any(col.lower() in ['asin', 'sku'] for col in df.columns):
-            st.error("The CSV file must contain an 'Asin' column for Amazon products.")
+            st.error("The CSV file must contain an 'Asin' column for Amazonr products.")
             return None
         return process_amazon_data(df, max_rows)
     elif csv_type == 'excel_format':
@@ -930,7 +1052,7 @@ def process_csv_data(df, max_rows=None):
         st.error("Could not detect CSV format. Please ensure your file contains either 'Asin' column for Amazon products, 'Listing ID' and 'url' columns for Excel format, or direct image URLs.")
         return None
 
-# Function to process Amazon data (original function renamed)
+# Function to process Amazon data
 def process_amazon_data(df, max_rows=None):
     if max_rows is not None and max_rows > 0 and max_rows < len(df):
         df = df.head(max_rows)
@@ -1042,8 +1164,8 @@ def process_amazon_data(df, max_rows=None):
             'Product_Title': product_info['title'],
             'Product_Price': product_info['price'],
             'Product_Image_URL': product_info['image_url'],
-            'Product_Description': 'N/A',  # Simplified - no longer fetching
-            'Product_Rating': 'N/A',       # Simplified - no longer fetching
+            'Product_Description': 'N/A',
+            'Product_Rating': 'N/A',
             'Fetch_Success': product_info['success'],
             'Product_Link': f"https://www.amazon.com/dp/{asin}",
             'Error': product_info.get('error', None)
@@ -1396,7 +1518,6 @@ def render_amazon_grid_tab():
         st.warning("No data has been processed yet. Please upload and process a CSV file in the Upload tab.")
         return
     
-    # Check if processed data is Amazon data
     csv_type = detect_csv_type(st.session_state.processed_data)
     if csv_type != 'amazon':
         st.warning("This tab is for Amazon products only. Please use the Excel Grid Images tab for other formats.")
@@ -1451,7 +1572,6 @@ def render_amazon_grid_tab():
             sort_by=sort_by if sort_by != "None" else None
         )
     
-    # Export button
     try:
         if st.download_button(
             label="Export Amazon Data to CSV",
@@ -1464,14 +1584,12 @@ def render_amazon_grid_tab():
     except Exception as e:
         st.error(f"Error exporting data: {str(e)}")
 
-# Function to render the Excel Grid tab (no sorting/filtering)
-# Function to render the Excel Grid tab (no sorting/filtering)
+# Function to render the Excel Grid tab
 def render_excel_grid_tab():
     if st.session_state.processed_data is None:
         st.warning("No data has been processed yet. Please upload and process a CSV file in the Upload tab.")
         return
     
-    # Check if processed data is direct URLs or Excel format
     csv_type = detect_csv_type(st.session_state.processed_data)
     if csv_type not in ['direct_urls', 'excel_format']:
         st.warning("This tab is for Excel files with direct image URLs. Please use the Amazon Grid Images tab for Amazon products.")
@@ -1502,7 +1620,6 @@ def render_excel_grid_tab():
     else:
         display_simple_product_grid(st.session_state.processed_data)
     
-    # Export button
     try:
         if st.download_button(
             label="Export Excel Data to CSV",
@@ -1514,11 +1631,8 @@ def render_excel_grid_tab():
             st.success("Excel data exported successfully!")
     except Exception as e:
         st.error(f"Error exporting data: {str(e)}")
-        
-        
-        
-# Simple grid display functions (no filtering/sorting)
-# REPLACEMENT for display_simple_product_grid
+
+# Simple grid display functions
 def display_simple_product_grid(df):
     if df is None or df.empty:
         st.warning("No data available to display.")
@@ -1526,32 +1640,30 @@ def display_simple_product_grid(df):
 
     import streamlit.components.v1 as components
 
-    # This HTML uses a clean masonry layout with column-count.
-    # It's wrapped in a container with a fixed height and vertical scroll.
     html_content = f"""
     <style>
         .masonry-container {{
-            height: 800px; /* Fixed height for the scrollable area */
+            height: 800px;
             overflow-y: auto;
             padding: 5px;
             background-color: #f0f0f0;
             border-radius: 5px;
         }}
         .masonry-grid {{
-            column-count: 5;  /* 5 columns for the standard view */
+            column-count: 5;
             column-gap: 5px;
         }}
         .masonry-item {{
-            margin-bottom: 5px; /* Vertical gap between items */
-            break-inside: avoid; /* Essential for masonry: prevents items from splitting across columns */
+            margin-bottom: 5px;
+            break-inside: avoid;
             border-radius: 4px;
             overflow: hidden;
             background-color: white;
         }}
         .masonry-item img {{
-            display: block; /* Removes bottom space under image */
+            display: block;
             width: 100%;
-            height: auto;   /* Maintains aspect ratio */
+            height: auto;
             object-fit: cover;
         }}
     </style>
@@ -1570,7 +1682,6 @@ def display_simple_product_grid(df):
             </div>
             """
         else:
-            # Optionally, show a placeholder for items without a valid URL
             html_content += f"""
             <div class="masonry-item" style="height:150px; display:flex; align-items:center; justify-content:center; text-align:center; color: #888; font-size: 12px;">
                 No Image Found
@@ -1582,9 +1693,8 @@ def display_simple_product_grid(df):
     </div>
     """
     
-    components.html(html_content, height=810) # Set height to container height + padding
+    components.html(html_content, height=810)
 
-# REPLACEMENT for display_simple_fullscreen_grid
 def display_simple_fullscreen_grid(df):
     if df is None or df.empty:
         st.warning("No data available to display.")
@@ -1592,21 +1702,18 @@ def display_simple_fullscreen_grid(df):
 
     import streamlit.components.v1 as components
 
-    # The Streamlit button to exit fullscreen remains outside the HTML component
     exit_container = st.container()
     with exit_container:
         if st.button("✕", key="exit_fullscreen_excel_grid", help="Exit fullscreen (or press Esc)"):
             st.session_state.fullscreen_mode = False
             st.rerun()
 
-    # The HTML content now includes a proper masonry layout and the critical JavaScript
-    # to achieve a true fullscreen overlay effect.
     html_content = """
     <style>
         body {
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Prevent parent scrollbars */
+            overflow: hidden;
         }
         
         .fullscreen-wrapper {
@@ -1614,15 +1721,16 @@ def display_simple_fullscreen_grid(df):
             top: 0;
             left: 0;
             width: 100vw;
-            height: 100vh; /* This makes it fill the entire screen height */
+            height: 100vh;
             background-color: #1e1e1e;
-            overflow-y: auto; /* Adds a scrollbar only if needed */
+            overflow-y: auto;
             padding: 10px;
             box-sizing: border-box;
+            z-index: 9990;
         }
         
         .masonry-grid-fullscreen {
-            column-count: 7; /* More columns for the fullscreen view */
+            column-count: 7;
             column-gap: 8px;
         }
         
@@ -1670,30 +1778,23 @@ def display_simple_fullscreen_grid(df):
     </div>
     
     <script>
-        // This script is crucial. It finds and hides the main Streamlit UI elements
-        // to allow the component to fill the entire browser window.
         function enterFullscreenMode() {
             const streamlitDoc = window.parent.document;
             if (!streamlitDoc) return;
 
-            // Find our component's iframe to keep its container visible
             const iframe = streamlitDoc.querySelector('iframe[srcdoc*="fullscreen-wrapper"]');
             
-            // Hide all direct children of the main app container except the one holding our component
             const mainAppContainer = streamlitDoc.querySelector('.stApp');
             if (mainAppContainer) {
                 Array.from(mainAppContainer.children).forEach(child => {
                     if (iframe && child.contains(iframe)) {
-                        // This is the container for our component, keep it
                     } else {
-                        // Hide all other elements like headers, tabs, footers, etc.
                         child.style.display = 'none';
                     }
                 });
             }
         }
         
-        // This handles the Escape key press to exit fullscreen
         function handleEscKey(event) {
             if (event.key === "Escape") {
                 const exitButton = window.parent.document.querySelector('button[key="exit_fullscreen_excel_grid"]');
@@ -1703,21 +1804,17 @@ def display_simple_fullscreen_grid(df):
             }
         }
 
-        // Run the script on load and add the event listener
         window.addEventListener('load', enterFullscreenMode);
         window.parent.document.addEventListener('keydown', handleEscKey);
 
-        // Cleanup listener when the component is unmounted
         window.addEventListener('beforeunload', () => {
              window.parent.document.removeEventListener('keydown', handleEscKey);
         });
-
     </script>
     """
     
-    # Using height=None allows the component's content to define its own dimensions,
-    # which is perfect for our position:fixed fullscreen wrapper.
-    components.html(html_content, height=1000, scrolling=True)
+    components.html(html_content, height=1000)
+
 def render_upload_tab():
     st.markdown("""
     <div class="upload-container">
@@ -1746,25 +1843,18 @@ def render_upload_tab():
             if uploaded_file.name.endswith('.csv'):
                 df = pd.read_csv(uploaded_file)
             else:
-                # Special handling for Excel files
-                # Load the Excel file to get all sheet names
                 excel_file = pd.ExcelFile(uploaded_file)
                 sheet_names = excel_file.sheet_names
                 if not sheet_names:
                     st.error("No sheets found in the Excel file.")
                     return
                 
-                # Read the last sheet
                 last_sheet = sheet_names[-1]
                 df = pd.read_excel(uploaded_file, sheet_name=last_sheet)
                 
-                # Handle unnamed columns by giving them generic names
                 df.columns = [f'Column_{i}' if col.startswith('Unnamed:') else col for i, col in enumerate(df.columns)]
                 
-                # Skip rows that are entirely NaN
                 df = df.dropna(how='all')
-                
-                # Reset index after dropping rows
                 df = df.reset_index(drop=True)
             
             with st.expander("Preview Raw Data"):
@@ -1784,12 +1874,10 @@ def render_upload_tab():
                 </div>
                 """.format(df.head(5).to_json(orient='records', indent=2)), unsafe_allow_html=True)
             
-            # Detect CSV type and show info
             csv_type = detect_csv_type(df)
             total_rows = len(df)
             
             if csv_type == 'amazon':
-                # Find the ASIN column (case insensitive)
                 asin_col = None
                 for col in df.columns:
                     if col.lower() in ['asin', 'sku']:
@@ -1804,7 +1892,6 @@ def render_upload_tab():
                     
             elif csv_type == 'excel_format':
                 st.info(f"📋 **Excel Format detected** - File contains {total_rows} rows with 'Listing ID' and 'url' columns (from last sheet: '{last_sheet}').")
-                # Show sample of the data
                 listing_id_col = None
                 url_col = None
                 for col in df.columns:
@@ -1819,13 +1906,11 @@ def render_upload_tab():
                     for _, row in df.head(3).iterrows():
                         if pd.notna(row[listing_id_col]) and pd.notna(row[url_col]):
                             sample_data.append(f"ID: {row[listing_id_col]} → URL: {str(row[url_col])[:50]}...")
-
                             
             elif csv_type == 'direct_urls':
-                # Count how many rows have image URLs
                 url_count = 0
                 sample_urls = []
-                for _, row in df.head(10).iterrows():  # Check first 10 rows
+                for _, row in df.head(10).iterrows():
                     for value in row:
                         if pd.notna(value):
                             value_str = str(value).strip()
@@ -1848,7 +1933,6 @@ def render_upload_tab():
                 st.write(f"- Columns: {list(df.columns)}")
                 st.write(f"- First row sample: {df.iloc[0].to_dict()}")
                 
-                # Show suggestions based on what we found
                 has_numeric_first_col = df.iloc[:, 0].apply(lambda x: str(x).replace('-', '').replace('_', '').isdigit()).any()
                 has_urls_anywhere = False
                 
@@ -1901,6 +1985,17 @@ def render_upload_tab():
 def main():
     add_custom_css()
     
+    # Check authentication status
+    if not st.session_state.authenticated:
+        verify_password()
+        return
+    
+    
+    st.markdown("""
+    <div class="top-logo-container">
+        <img src="data:image/png;base64,{logo_base64}" class="top-center-logo" alt="Logo">
+    </div>
+    """.format(logo_base64=get_logo_base64()), unsafe_allow_html=True)
     st.markdown("""
     <div class="main-header">
         <h1>Universal <span class="accent-text">Product Viewer</span></h1>
@@ -1925,7 +2020,6 @@ def main():
             )
             return
     
-    # Now 3 tabs - Upload, Amazon Grid, and Excel Grid
     tab_names = ["📤 Upload CSV", "📦 Amazon Grid Images", "📋 Excel Grid Images"]
     tabs = st.tabs(tab_names)
     
