@@ -799,12 +799,15 @@ def get_amazon_product_details(asin, log_queue, processing_id, total_count):
     return product_details
 
 # Function to detect CSV type and process accordingly
+# Just replace this one function in your code:
+
 def detect_csv_type(df):
     df_clean = df.dropna(how='all').copy()
     
     if df_clean.empty:
         return 'unknown'
     
+    # Make column checking case-insensitive
     columns_lower = [col.lower().strip() for col in df_clean.columns]
     
     if ('listing id' in columns_lower and 'url' in columns_lower) or \
@@ -812,10 +815,10 @@ def detect_csv_type(df):
        ('listingid' in columns_lower and 'url' in columns_lower):
         return 'excel_format'
     
-    amazon_columns = ['asin', 'sku', 'product_id']
-    for col in df_clean.columns:
-        if any(amazon_term in col.lower() for amazon_term in amazon_columns):
-            return 'amazon'
+    # Check for Amazon columns (case-insensitive)
+    amazon_columns = ['asin', 'sku', 'product_id'] 
+    if any(amazon_col in columns_lower for amazon_col in amazon_columns):
+        return 'amazon'
     
     for index, row in df_clean.head(20).iterrows():
         for value in row:
@@ -1071,9 +1074,20 @@ def process_amazon_data(df, max_rows=None):
     
     log_container.markdown('<div class="log-container">', unsafe_allow_html=True)
     
-    unique_asins = df['Asin'].unique()
+    asin_col = None
+    for col in df.columns:
+        if col.lower().strip() in ['asin', 'sku']:
+            asin_col = col
+            break
+
+    if not asin_col:
+        st.error(f"No ASIN/SKU column found. Available columns: {list(df.columns)}")
+        return None
+
+    # Use the actual column name
+    unique_asins = df[asin_col].unique()
     total_asins = len(unique_asins)
-    
+        
     status_text.text(f"Processing {total_asins} unique Amazon products...")
     add_log(f"Starting processing of {total_asins} unique ASINs")
     
@@ -1149,7 +1163,7 @@ def process_amazon_data(df, max_rows=None):
     enriched_data = []
     
     for _, row in df.iterrows():
-        asin = row['Asin']
+        asin = row[asin_col]
         product_info = all_product_details.get(asin, {
             'asin': asin,
             'title': 'Product information not available',
@@ -1878,14 +1892,15 @@ def render_upload_tab():
             total_rows = len(df)
             
             if csv_type == 'amazon':
+                # Find the actual ASIN column (case-insensitive)
                 asin_col = None
                 for col in df.columns:
-                    if col.lower() in ['asin', 'sku']:
+                    if col.lower().strip() in ['asin', 'sku']:
                         asin_col = col
                         break
                 
                 if asin_col:
-                    unique_asins = df[asin_col].nunique()
+                    unique_asins = df[asin_col].nunique()  # Use the actual column name, not 'Asin'
                     st.info(f"📦 **Amazon CSV detected** - File contains {total_rows} rows with {unique_asins} unique ASINs in column '{asin_col}'.")
                 else:
                     st.info(f"📦 **Amazon CSV detected** - File contains {total_rows} rows.")
