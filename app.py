@@ -1060,6 +1060,21 @@ def process_amazon_data(df, max_rows=None):
     if max_rows is not None and max_rows > 0 and max_rows < len(df):
         df = df.head(max_rows)
     
+    # Find the actual ASIN column first
+    asin_col = None
+    for col in df.columns:
+        if col.lower().strip() in ['asin', 'sku']:
+            asin_col = col
+            break
+
+    if not asin_col:
+        st.error(f"No ASIN/SKU column found. Available columns: {list(df.columns)}")
+        return None
+
+    # Create a copy with renamed column for consistency
+    df_copy = df.copy()
+    df_copy = df_copy.rename(columns={asin_col: 'Asin'})
+    
     st.session_state.logs = []
     st.session_state.failed_asins = []
     st.session_state.processing_complete = False
@@ -1074,22 +1089,11 @@ def process_amazon_data(df, max_rows=None):
     
     log_container.markdown('<div class="log-container">', unsafe_allow_html=True)
     
-    asin_col = None
-    for col in df.columns:
-        if col.lower().strip() in ['asin', 'sku']:
-            asin_col = col
-            break
-
-    if not asin_col:
-        st.error(f"No ASIN/SKU column found. Available columns: {list(df.columns)}")
-        return None
-
-    # Use the actual column name
-    unique_asins = df[asin_col].unique()
+    unique_asins = df_copy['Asin'].unique()
     total_asins = len(unique_asins)
-        
+    
     status_text.text(f"Processing {total_asins} unique Amazon products...")
-    add_log(f"Starting processing of {total_asins} unique ASINs")
+    add_log(f"Starting processing of {total_asins} unique ASINs from column '{asin_col}'")
     
     log_queue = queue.Queue()
     
@@ -1162,8 +1166,8 @@ def process_amazon_data(df, max_rows=None):
     
     enriched_data = []
     
-    for _, row in df.iterrows():
-        asin = row[asin_col]
+    for _, row in df_copy.iterrows():
+        asin = row['Asin']
         product_info = all_product_details.get(asin, {
             'asin': asin,
             'title': 'Product information not available',
@@ -1213,6 +1217,9 @@ def process_amazon_data(df, max_rows=None):
     
     return enriched_df
 
+
+
+
 # Function to display fullscreen grid
 def display_fullscreen_grid(df, search_term=None, min_price=None, max_price=None, sort_by=None):
     if df is None or df.empty:
@@ -1221,12 +1228,29 @@ def display_fullscreen_grid(df, search_term=None, min_price=None, max_price=None
         
     filtered_df = df.copy()
     
-    if search_term:
+    # Check if 'Asin' column exists, if not, try to find ASIN column
+    asin_column = None
+    if 'Asin' in filtered_df.columns:
+        asin_column = 'Asin'
+    else:
+        # Try to find any ASIN-like column
+        for col in filtered_df.columns:
+            if col.lower().strip() in ['asin', 'sku']:
+                asin_column = col
+                break
+    
+    if search_term and asin_column:
         search_term_lower = search_term.lower()
         filtered_df = filtered_df[
             filtered_df['Product_Title'].str.lower().str.contains(search_term_lower, na=False) |
             filtered_df['Product_Description'].str.lower().str.contains(search_term_lower, na=False) |
-            filtered_df['Asin'].str.lower().str.contains(search_term_lower, na=False)
+            filtered_df[asin_column].str.lower().str.contains(search_term_lower, na=False)
+        ]
+    elif search_term:
+        search_term_lower = search_term.lower()
+        filtered_df = filtered_df[
+            filtered_df['Product_Title'].str.lower().str.contains(search_term_lower, na=False) |
+            filtered_df['Product_Description'].str.lower().str.contains(search_term_lower, na=False)
         ]
     
     if min_price is not None:
@@ -1382,7 +1406,12 @@ def display_fullscreen_grid(df, search_term=None, min_price=None, max_price=None
     
     for i, product in filtered_df.iterrows():
         image_url = product['Product_Image_URL']
-        asin = product['Asin']
+        
+        # Get ASIN value - use the column we found earlier
+        if asin_column and asin_column in product:
+            asin = product[asin_column]
+        else:
+            asin = f"Item_{i}"  # Fallback if no ASIN column
         
         if not image_url:
             image_url = "https://placehold.co/200x200?text=No+Image"
@@ -1433,12 +1462,29 @@ def display_product_grid(df, search_term=None, min_price=None, max_price=None, s
         
     filtered_df = df.copy()
     
-    if search_term:
+    # Check if 'Asin' column exists, if not, try to find ASIN column
+    asin_column = None
+    if 'Asin' in filtered_df.columns:
+        asin_column = 'Asin'
+    else:
+        # Try to find any ASIN-like column
+        for col in filtered_df.columns:
+            if col.lower().strip() in ['asin', 'sku']:
+                asin_column = col
+                break
+    
+    if search_term and asin_column:
         search_term_lower = search_term.lower()
         filtered_df = filtered_df[
             filtered_df['Product_Title'].str.lower().str.contains(search_term_lower, na=False) |
             filtered_df['Product_Description'].str.lower().str.contains(search_term_lower, na=False) |
-            filtered_df['Asin'].str.lower().str.contains(search_term_lower, na=False)
+            filtered_df[asin_column].str.lower().str.contains(search_term_lower, na=False)
+        ]
+    elif search_term:
+        search_term_lower = search_term.lower()
+        filtered_df = filtered_df[
+            filtered_df['Product_Title'].str.lower().str.contains(search_term_lower, na=False) |
+            filtered_df['Product_Description'].str.lower().str.contains(search_term_lower, na=False)
         ]
     
     if min_price is not None:
