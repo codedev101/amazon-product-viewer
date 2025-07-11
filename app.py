@@ -1307,7 +1307,7 @@ def display_fullscreen_grid(df, search_term=None, min_price=None, max_price=None
             left: 0;
             width: 100vw;
             height: 100vh;
-            background-color: #1e1e1e;
+            background-color: white; 
             z-index: 9999;
             overflow: auto;
             padding: 10px;
